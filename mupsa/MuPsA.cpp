@@ -176,7 +176,6 @@ void init_eventqueue(void) {
     // init task release events
     for (int i = 1; i<= n; ++i) {
         if (tasks[i].state == TASK_UNRELEASED) {
-            printf("add task %d release event to eq\n", i);
             ScheduleEvent se;
             se.kind = TASK_RELEASE,
             se.data.task_id = i,
