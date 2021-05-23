@@ -175,7 +175,8 @@ void init_eventqueue(void) {
     }
     // init task release events
     for (int i = 1; i<= n; ++i) {
-        if (tasks[i].release_time != 0) {
+        if (tasks[i].state == TASK_UNRELEASED) {
+            printf("add task %d release event to eq\n", i);
             ScheduleEvent se;
             se.kind = TASK_RELEASE,
             se.data.task_id = i,
@@ -258,7 +259,7 @@ void handle_task_release_event(ScheduleEvent &se, int tick, bool preemptive) {
     new_se.data.cpu_data.cpu_id = least_priority_cpu;
     new_se.data.cpu_data.finished_task_id = task_id;
     new_se.time = tick + tasks[task_id].exec_time;
-    eventq.push(se);
+    eventq.push(new_se);
     // bookkeep released task
     tasks[task_id].state = TASK_RUNNING;
     tasks[task_id].start_tick = tick;
