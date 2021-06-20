@@ -237,3 +237,5 @@ heuristic: 通过线性规划离线确定任务划分。
 8 11 1
 9 11 2
 ```
+
+输出部分除了优先级表、trace、统计信息外，还会生成一个`mermaid_out.mmd`文件，该文件是一个mermaid的脚本，可以用于生成gantt图。一个在线根据mermaid脚本生成图片的网站是[mermaid-online-editor](https://mermaid-js.github.io/mermaid-live-editor)。
