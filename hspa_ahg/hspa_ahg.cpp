@@ -85,6 +85,8 @@ int dep[MAX_TASKS][MAX_TASKS];          // inter-task communication costs
 Task tasks[MAX_TASKS];                  // global task list
 char comm_buf[BUF_SIZE];                // mermaid comm buf
 int comm_bufp;                          // comm buf pointer
+char md_comm_buf[BUF_SIZE];             // markdown comm buf
+int md_comm_bufp;
 
 // schedule event queue
 priority_queue<ScheduleEvent,
@@ -111,7 +113,7 @@ bool operator < (const ScheduleEvent &lhs, const ScheduleEvent &rhs) {
                 tid = rhs.payload.task_release_data.task_id;
                 rhs_priority = tasks[tid].priority;
                 break;
-            default: assert("code should not reach here");
+            default: assert(0 && "code should not reach here");
         }
         return lhs_priority < rhs_priority;
     } else {
@@ -371,13 +373,14 @@ void handle_communication_finish_event(ScheduleEvent &se, int tick) {
 
     // mermaid bookkeeping
     char s[100];
+    int stime = tasks[from_tid].start_tick + tasks[from_tid].exec_time;
     sprintf(s, "\t%d->%d :done, des1, %2d, %2d\n",
-            from_tid, to_tid,
-            tasks[from_tid].start_tick + tasks[from_tid].exec_time,
-            tick
-            );
+            from_tid, to_tid, stime, tick);
     sprintf(comm_buf + comm_bufp, "%s", s);
     comm_bufp += strlen(s);
+    sprintf(s, "B(%d->%d,%d,%d)<br>", from_tid, to_tid, stime, tick);
+    sprintf(md_comm_buf + md_comm_bufp, "%s", s);
+    md_comm_bufp += strlen(s);
 
     if (is_scheduable(to_tid))
         tasks[to_tid].state = TASK_READY;
@@ -446,7 +449,7 @@ int scheduler() {
                 handle_communication_finish_event(e, cur_tick);
                 break;
             default:
-                assert("Unknown event type\n");
+                assert(0 && "Unknown event type\n");
             }
         } while (eventq.size() > 0 && eventq.top().time == cur_tick);
         schedule(cur_tick);
@@ -474,30 +477,46 @@ void print_metrics(int total_ticks) {
 
 void gen_mermaid_output(void) {
     FILE *f = fopen("./mermaid_out.mmd", "w");
+    FILE *mf = fopen("./markdown_table.md", "w");
     fprintf(f, "gantt\ntitle 任务调度图\n");
     fprintf(f, "\tdateFormat s\n");
     fprintf(f, "\taxisFormat %%S\n");
+
+    fprintf(mf, "|处理器|c1|c2|H|硬件面积|BUS|\n");
+    fprintf(mf, "|---|---|---|---|---|---|\n");
+    fprintf(mf, "|分配方案|-|-|-|-|-|\n");
+    fprintf(mf, "|最大执行时间|-|-|-|-|-|\n");
+    fprintf(mf, "|统计数据|-|-|-|-|-|\n");
+    fprintf(mf, "|使用效率|-|-|-|-|-|\n");
+    fprintf(mf, "\n");
 
     // all kinds of cpu
     for (int i = 1; i <= nexecutors; ++i) {
         const Executor *const e = &executors[i];
         for (int j = 1; j <= e->ncpu; ++j) {
             fprintf(f, "\tsection CPU %d.%d\n", i, j);
+            fprintf(mf, "CPU %d.%d\n", i, j);
             for (int k = 1; k <= nalltasks; ++k) {
                 if (tasks[k].running_executor == i &&
                     tasks[k].running_cpu == j) {
                     int stime = tasks[k].start_tick;
                     int ftime = stime + tasks[k].exec_time;
                     fprintf(f, "\ttask%d :done, des1, %02d, %02d\n", k, stime, ftime);
+                    fprintf(mf, "T%d(%d->%d)<br>", k, stime, ftime);
                 }
             }
+            fprintf(mf, "\n");
         }
     }
 
     fprintf(f, "\tsection BUS\n");
+    fprintf(mf, "BUS\n");
     // bus communication
     fprintf(f, "%s", comm_buf);
+    fprintf(mf, "%s", md_comm_buf);
+
     fclose(f);
+    fclose(mf);
 }
 
 int main(int argc, char **argv) {
