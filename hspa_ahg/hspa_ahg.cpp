@@ -23,11 +23,13 @@ enum TaskState {
 };
 
 struct Task {
-    int priority;       // task priority
-    int release_time;   // task release time
-    int start_tick;     // task start tick
-    int exec_time;      // task execution time
-    TaskState state;    // task current state
+    int priority;                               // task priority
+    int release_time;                           // task release time
+    int start_tick;                             // task start tick
+    int exec_time;                              // task execution time
+    int candidate_exec_times[MAX_EXECUTORS];    // candidate executors' exec time
+    int hardware_area;                          // hardware area
+    TaskState state;                            // task current state
     // bookkeep info
     int running_executor;
     int running_cpu;
@@ -38,6 +40,10 @@ struct Cpu {
     int finish_time;
     int running_time;
     queue<int> task_record;
+    // overall book keep info
+    bool start;
+    int start_tick;
+    int finish_tick;
 };
 
 enum EventKind {
@@ -76,8 +82,13 @@ struct Executor {
     int ncpu;
     int tasks[MAX_TASKS];
     Cpu cpus[MAX_CPUS];
+    // book keep info
+    bool start;
+    int start_time;
+    int finish_time;
 };
 
+int nlimits;                             // hardware area limit
 int nalltasks;                          // number of all tasks
 int nexecutors;                         // number of executors
 Executor executors[MAX_EXECUTORS];      // executors
@@ -155,32 +166,122 @@ bool is_scheduable(int task) {
     return true;
 }
 
-Executor read_executor_setting(FILE *f, int sid) {
-    Executor e;
-    fscanf(f, "%d%d", &e.ntasks, &e.ncpu);
-    for (int i = 1; i <= e.ntasks; i++) {
-        Task *t;
-        fscanf(f, "%d", &e.tasks[i]);
-        t = &tasks[e.tasks[i]];
-        fscanf(f, "%d%d",
-                &t->exec_time,
-                &t->release_time);
-    }
-    return e;
-}
+// Executor read_executor_setting(FILE *f, int sid) {
+//     Executor e;
+//     fscanf(f, "%d%d", &e.ntasks, &e.ncpu);
+//     for (int i = 1; i <= e.ntasks; i++) {
+//         Task *t;
+//         fscanf(f, "%d", &e.tasks[i]);
+//         t = &tasks[e.tasks[i]];
+//         fscanf(f, "%d%d",
+//                 &t->exec_time,
+//                 &t->release_time);
+//     }
+//     return e;
+// }
 
 void read_input(FILE *f) {
     int a, b, w;
 
-    fscanf(f, "%d%d", &nalltasks, &nexecutors);
-    for (int i = 1; i <= nexecutors; i++) {
-        executors[i] = read_executor_setting(f, i);
+    fscanf(f, "%d%d%d", &nalltasks, &nexecutors, &nlimits);
+    for (int i = 1; i <= nexecutors; ++i) {
+        fscanf(f, "%d", &executors[i].ncpu);
+    }
+
+    for (int i = 1; i <= nalltasks; ++i) {
+        for (int j = 1; j <= nexecutors; ++j) {
+            fscanf(f, "%d", &tasks[i].candidate_exec_times[j]);
+        }
+        fscanf(f, "%d%d",
+            &tasks[i].hardware_area,
+            &tasks[i].release_time);
     }
 
     // read dependencies matrix
     while (fscanf(f, "%d%d%d", &a, &b, &w) != EOF) {
         dep[a][b] = w;
     }
+}
+
+/**
+ * Determine each task's executor so that we can get max hardware gain.
+ */
+void partition_tasks(void) {
+    // for (int i = 1; i <= nalltasks; ++i) {
+    //     printf("task %d, soft etime: %d, hard etime: %d, hard_area: %d, release time: %d\n",
+    //             i, tasks[i].candidate_exec_times[1], tasks[i].candidate_exec_times[2],
+    //             tasks[i].hardware_area, tasks[i].release_time);
+    // }
+
+    int gain[nalltasks];
+    int dp[nlimits + 1][nalltasks + 1];
+    int record[nlimits + 1][nalltasks + 1];
+
+    memset(dp, 0, sizeof(int) * (nlimits + 1) * (nalltasks + 1));
+
+    for (int i = 1; i <= nalltasks; ++i) {
+        gain[i] = tasks[i].candidate_exec_times[1] -
+                  tasks[i].candidate_exec_times[2];
+    }
+
+    for (int i = 1; i <= nlimits; ++i) {
+        for (int j = 1; j <= nalltasks; ++j) {
+            int cost = tasks[j].hardware_area;
+            if (i >= cost) {
+                const int max_with_soft = dp[i][j-1];
+                const int max_with_hard = dp[i-cost][j-1] + gain[j];
+
+                if (max_with_soft > max_with_hard) {
+                    record[i][j] = 0;
+                    dp[i][j] = max_with_soft;
+                } else {
+                    record[i][j] = 1;
+                    dp[i][j] = max_with_hard;
+                }
+            } else {
+                record[i][j] = 0;
+            }
+        }
+    }
+
+    int i = nlimits, j = nalltasks;
+    int hard_in = 1, soft_in = 1;
+
+    // assign each task to hardware/software and set runtime exec time
+    for (; j > 0; --j) {
+        if (record[i][j]) {
+            executors[2].tasks[hard_in++] = j;
+            tasks[j].exec_time = tasks[j].candidate_exec_times[2];
+            i -= tasks[j].hardware_area;
+        } else {
+            tasks[j].exec_time = tasks[j].candidate_exec_times[1];
+            executors[1].tasks[soft_in++] = j;
+        }
+    }
+
+    executors[1].ntasks = soft_in - 1;
+    executors[2].ntasks = hard_in - 1;
+
+    // print metrics
+    int hard_cost = 0;
+    printf("max hardware gain: %d\n", dp[nlimits][nalltasks]);
+    for (int i = 1; i <= executors[2].ntasks; ++i)
+        hard_cost += tasks[executors[2].tasks[i]].hardware_area;
+    printf("hardware area cost: %d\n", hard_cost);
+
+    printf("soft task:");
+    for (int i = 1; i <= executors[1].ntasks; ++i) {
+        printf(" %d", executors[1].tasks[i]);
+    }
+    printf("\n");
+
+    printf("hard task: ");
+    for (int i = 1; i <= executors[2].ntasks; ++i) {
+        printf(" %d", executors[2].tasks[i]);
+    }
+    printf("\n");
+
+    printf("--------------------------------------------------------------------------------\n");
 }
 
 /**
@@ -322,12 +423,14 @@ void handle_cpu_finished_event(ScheduleEvent &se, int tick) {
     if (finished_task_id <= 0 || finished_task_id > nalltasks)
         return;
 
+    executors[executor_id].finish_time = tick;
+
     Cpu *const cpu = &executors[executor_id].cpus[cpu_id];
-
-    tasks[finished_task_id].state = TASK_FINISHED;
-
     cpu->cur_task = 0;
     cpu->running_time += tasks[finished_task_id].exec_time;
+    cpu->finish_tick = tick;
+
+    tasks[finished_task_id].state = TASK_FINISHED;
 
     if (finished_task_id)
         printf("[%04d] CPU %d.%d finished executing Task %d\n", tick, executor_id, cpu_id, finished_task_id);
@@ -399,6 +502,15 @@ void schedule(int tick) {
                 for (; rank_id <= executors[i].ntasks; ++rank_id) {
                     int task_id = executors[i].tasks[rank_id];
                     if (tasks[task_id].state == TASK_READY) {
+                        if (!executors[i].start) {
+                            executors[i].start = true;
+                            executors[i].start_time = tick;
+                        }
+
+                        if (!cpu->start) {
+                            cpu->start = true;
+                            cpu->start_tick = tick;
+                        }
                         cpu->cur_task = task_id;
                         cpu->finish_time = tick + tasks[task_id].exec_time;
                         cpu->task_record.push(task_id);
@@ -428,6 +540,7 @@ void schedule(int tick) {
 /**
  * Schedule and execute tasks.
  * Within a single tick, handle events first and then schedule tasks.
+ * Return total ticks.
  */
 int scheduler() {
     int total_ticks = 0;
@@ -457,14 +570,16 @@ int scheduler() {
     return total_ticks;
 }
 
-void print_metrics(int total_ticks) {
+void print_metrics(void) {
     printf("--------------------------------------------------------------------------------\n");
-    printf("%10s %15s %15s %15s\n", "CPU", "RUNNING_TIME", "TOTAL_TIME", "UTILIZATION");
+    printf("%10s %15s %15s %15s %15s\n", "CPU", "RUNNING_TIME", "CPU_TOTAL_TIME", "EXECUTOR_TOTAL_TIME", "CPU_UTILIZATION");
     for (int i = 1; i <= nexecutors; ++i) {
         for (int j = 1; j <= executors[i].ncpu; ++j) {
             Cpu *const cpu = &executors[i].cpus[j];
             const int running_ticks = cpu->running_time;
-            printf("%8d.%d %15d %15d %15f     ", i, j, running_ticks, total_ticks, running_ticks * 1.0 / total_ticks);
+            const int executor_ticks = executors[i].finish_time - executors[i].start_time;
+            const int cpu_ticks = cpu->finish_tick - cpu->start_tick;
+            printf("%8d.%d %15d %15d %15d %15f     ", i, j, running_ticks, cpu_ticks, executor_ticks, running_ticks * 1.0 / cpu_ticks);
             const int runned_tasks = cpu->task_record.size();
             for (int j = 0; j < runned_tasks; ++j) {
                 printf(" %d%c", cpu->task_record.front(), j == runned_tasks - 1 ? '\0' : ',');
@@ -473,6 +588,7 @@ void print_metrics(int total_ticks) {
             printf("\n");
         }
     }
+    printf("--------------------------------------------------------------------------------\n");
 }
 
 void gen_mermaid_output(void) {
@@ -533,13 +649,13 @@ int main(int argc, char **argv) {
     }
     read_input(f);
     fclose(f);
-
+    partition_tasks();
     init_tasks();
     calc_priorities();
     sort_tasks();
     print_rankings();
-    total_ticks = scheduler();
-    print_metrics(total_ticks);
+    scheduler();
+    print_metrics();
     gen_mermaid_output();
     return 0;
 }
