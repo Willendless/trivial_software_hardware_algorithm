@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define MAX_TASKS 50
@@ -49,10 +50,22 @@ int main(int argc, char *argv[])
         printf("输入模块任务数：");
         scanf("%d", &module_task_cnt);
         overall_cnt += module_task_cnt;
-        printf("输入任务索引：");
-        for (int i = 1; i <= module_task_cnt; ++i)
-            scanf("%d", &tasks[i]);
-        
+
+        if (overall_cnt > task_nums) {
+            fprintf(stderr, "模块任务数错误，超出总任务数\n");
+            exit(-1);
+        }
+
+        // no need to get task index if there is only one module
+        if (module_task_cnt == task_nums) {
+            for (int i = 1; i <= task_nums; ++i)
+                tasks[i] = i;
+        } else {
+            printf("输入任务索引：");
+            for (int i = 1; i <= module_task_cnt; ++i)
+                scanf("%d", &tasks[i]);
+        }
+
         sprintf(ofname, "lingo_out%d.txt", module_cnt);
 
 
