@@ -99,7 +99,7 @@ void print_ans(void)
         }
     }
 
-    // for (int i = 1; i <= ans_index; ++i) {
+    // for (int i = 0; i < ans_index; ++i) {
         for (set<int> &m : ans[ans_index]) {
             printf("{");
             for (int t : m) {
@@ -148,11 +148,12 @@ void mmm(mergable fun, int seed)
                     rec.push_back(pair<int, int>(i, j));
                 }
             }
+        }
 
-            // unable to merge
-            int candidates = rec.size();
-            if (!candidates) continue;
+        // unable to merge
+        int candidates = rec.size();
 
+        if (candidates) {
             int k = rand() % candidates;
             int a = rec[k].first;
             int b = rec[k].second;
@@ -165,12 +166,9 @@ void mmm(mergable fun, int seed)
             rec.clear();
 
             --modules_cnt;
-
-            if (modules_cnt == module_nums)
-                break;
         }
 
-        print_tuples(modules, modules_cnt, cost_limit);
+        print_tuples(modules, modules_cnt, cost_limit < 0 ? 0 : cost_limit);
 
         --cost_limit;
         if (cost_limit < -10) {
@@ -179,6 +177,9 @@ void mmm(mergable fun, int seed)
         } else if (modules_cnt == module_nums)
             store_ans();
     } while (modules_cnt != module_nums);
+
+    printf("cost: %lf\n", calc_cost(ans[ans.size() - 1]));
+    printf("-------------------------------------\n");
 }
 
 bool single_link(const set<int> &a, const set<int> &b, const int cost_limit)
@@ -242,10 +243,10 @@ int main(int argc, char *argv[])
     get_input(f);
 
     // in case you want to add some entropy into mmm
-    // for (int i = 1; i <= 10000; ++i) {
-    init();
-    mmm(link_funcs[fun_index], 100);
-    // }
+    for (int i = 1; i <= 10000; ++i) {
+        init();
+        mmm(link_funcs[fun_index], rand());
+    }
 
     print_ans();
     fclose(f);
