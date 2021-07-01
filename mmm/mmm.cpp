@@ -99,17 +99,19 @@ void print_ans(void)
         }
     }
 
-    for (set<int> &m : ans[ans_index]) {
-        printf("{");
-        for (int t : m) {
-            printf("%d,", t);
+    // for (int i = 1; i <= ans_index; ++i) {
+        for (set<int> &m : ans[ans_index]) {
+            printf("{");
+            for (int t : m) {
+                printf("%d,", t);
+            }
+            printf("}");
         }
-        printf("}");
-    }
+        printf("\n");
+    // }
     printf("\n------------------------------------------\n");
     printf("total cost: %lf\n", min_cost);
 }
-
 
 void mmm(mergable fun, int seed)
 {
@@ -117,7 +119,7 @@ void mmm(mergable fun, int seed)
     int modules_cnt = task_nums; 
     int cost_limit = max_cost + 1;
 
-    // print_tuples(modules_cnt, cost_limit);
+    print_tuples(modules, modules_cnt, cost_limit);
     --cost_limit;
 
     do {
@@ -155,6 +157,9 @@ void mmm(mergable fun, int seed)
             int a = rec[k].first;
             int b = rec[k].second;
             modules[a].insert(modules[b].begin(), modules[b].end());
+
+            // printf("%d <- %d\n", a, b);
+
             modules[b].clear();
             modules.erase(modules.begin() + b);
             rec.clear();
@@ -164,13 +169,15 @@ void mmm(mergable fun, int seed)
             if (modules_cnt == module_nums)
                 break;
         }
-        // print_tuples(modules_cnt, cost_limit);
-        --cost_limit;
-        if (cost_limit < -1)
-            break;
-        else
-            store_ans();
 
+        print_tuples(modules, modules_cnt, cost_limit);
+
+        --cost_limit;
+        if (cost_limit < -10) {
+            fprintf(stderr, "[WARNING] cost limit reach -10, loop terminate\n");
+            break;
+        } else if (modules_cnt == module_nums)
+            store_ans();
     } while (modules_cnt != module_nums);
 }
 
@@ -186,7 +193,7 @@ bool single_link(const set<int> &a, const set<int> &b, const int cost_limit)
     return false;
 }
 
-bool compare_link(const set<int> &a, const set<int> &b, const int cost_limit)
+bool complete_link(const set<int> &a, const set<int> &b, const int cost_limit)
 {
     for (int n : a) {
         for (int i = 1; i <= task_nums; ++i) {
@@ -213,7 +220,7 @@ bool average_link(const set<int> &a, const set<int> &b, const int cost_limit)
     return (cost_sum * 1.0) / (cnt * 1.0) >= cost_limit;
 }
 
-mergable link_funcs[] = {single_link, compare_link, average_link};
+mergable link_funcs[] = {single_link, complete_link, average_link};
 
 int main(int argc, char *argv[])
 {
@@ -222,7 +229,7 @@ int main(int argc, char *argv[])
     if (argc != 3) {
         printf("usage: MMM [file name] [link func index]\n");
         printf("  0: single link\n");
-        printf("  1: compare link\n");
+        printf("  1: complete link\n");
         printf("  2: average link\n");
         return -1;
     }
@@ -233,10 +240,13 @@ int main(int argc, char *argv[])
     fun_index = atoi(argv[2]);
     fun_index = fun_index >= 3 ? 0 : fun_index;
     get_input(f);
-    for (int i = 1; i <= 1000; ++i) {
-        init();
-        mmm(link_funcs[fun_index], i);
-    }
+
+    // in case you want to add some entropy into mmm
+    // for (int i = 1; i <= 10000; ++i) {
+    init();
+    mmm(link_funcs[fun_index], 100);
+    // }
+
     print_ans();
     fclose(f);
     return 0;
