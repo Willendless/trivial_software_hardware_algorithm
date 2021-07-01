@@ -150,10 +150,10 @@ void mmm(mergable fun, int seed)
             }
         }
 
-        // unable to merge
         int candidates = rec.size();
 
         if (candidates) {
+            // able to merge
             int k = rand() % candidates;
             int a = rec[k].first;
             int b = rec[k].second;
