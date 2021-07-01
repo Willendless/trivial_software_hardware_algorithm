@@ -222,6 +222,7 @@ void partition_tasks(void) {
     for (int i = 1; i <= nalltasks; ++i) {
         gain[i] = tasks[i].candidate_exec_times[1] -
                   tasks[i].candidate_exec_times[2];
+        printf("gain i = %d\n", gain[i]);
     }
 
     for (int i = 1; i <= nlimits; ++i) {
@@ -239,9 +240,17 @@ void partition_tasks(void) {
                     dp[i][j] = max_with_hard;
                 }
             } else {
+                dp[i][j] = dp[i][j-1];
                 record[i][j] = 0;
             }
         }
+    }
+
+    for (int i = 1; i <= nlimits; ++i) {
+        for (int j = 1; j <= nalltasks; ++j) {
+            printf("%d ", dp[i][j]);
+        }
+        printf("\n");
     }
 
     int i = nlimits, j = nalltasks;
